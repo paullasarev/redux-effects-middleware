@@ -1,60 +1,129 @@
 # redux-effects-middleware
 
-### Getting started
+  * [Getting started](#getting-started)          
+    + [installation](#installation)              
+    + [instantiation](#instantiation)            
+  * [effects](#effects)                          
+    + [takeEvery](#takeevery)                    
+    + [dispatch](#dispatch)                      
+    + [select](#select)                          
+    + [take](#take)                              
+    + [takeLatest](#takelatest)                  
+    + [delay](#delay)                            
+    + [debounce](#debounce)                      
+    + [throttle](#throttle)                      
+  * [effect combinators](#effect-combinators)    
+    + [all](#all)                                
+    + [race](#race)                              
+
+## Getting started
+### installation
 
 ```bash
 > npm i --save-dev redux-effects-middleware
 ```
 
+### instantiation
+
 ```js
 import { createStore, applyMiddleware } from 'redux';
 import { createMiddleware } from 'redux-effects-middleware';
 
-const effectsOptions = {
-
-};
+function initEffects(effects) {
+  // call effects.XXX to init effects);
+}
 
 const store = createStore(
   rootReducer,
   applyMiddleware(
-    createMiddleware(effectsOptions),
+    createMiddleware(initEffects),
   ),
 );
 
 ```
 
-###init effects
-
-```js
-export function initEffects(effects, options) {
-  // call effects.XXX to init effects);
-}
-
-const effectsOptions = {
-  initEffects,
-};
-```
-
-### takeEvery effect
+## effects
+### takeEvery
 
 ```js
 async function onConfigSuccess(effects, action) {
-  const { user: { id } } = action.payload;
-  return dispatch(getUserAction(id));
+  console.log(action)
 }
 
-export function initEffects(effects, options) {
+export function initEffects(effects) {
   effects.takeEvery(CONFIG_SUCCESS_ACTION, onConfigSuccess);
 }
 ```
 
-### dispatch actions
+### dispatch
+```js
+async function onConfigSuccess(effects, action) {
+  const { user: { id } } = action.payload;
+  return effects.dispatch(getUserAction(id));
+}
 
-### select store state
+export function initEffects(effects) {
+  effects.takeEvery(CONFIG_SUCCESS_ACTION, onConfigSuccess);
+}
+```
 
-### delay effect
+### select
 
-### take effect
+```js
+async function onConfigSuccess(effects, action) {
+  const { app: { user: { id } } } = effects.select();
+}
 
+export function initEffects(effects) {
+  effects.takeEvery(CONFIG_SUCCESS_ACTION, onConfigSuccess);
+}
+```
+
+```js
+async function onConfigSuccess(effects, action) {
+  const { user: { id } } = effects.select(state->state.app);
+}
+
+export function initEffects(effects) {
+  effects.takeEvery(CONFIG_SUCCESS_ACTION, onConfigSuccess);
+}
+```
+
+### take
+
+```js
+async function onConfigSuccess(effects, action) {
+  await effects.dispatch(apiAction());
+  const action = await effects.take(API_ACTION_SUCCESS);
+}
+
+export function initEffects(effects) {
+  effects.takeEvery(CONFIG_SUCCESS_ACTION, onConfigSuccess);
+}
+```
+
+```js
+async function onConfigSuccess(effects, action) {
+  await effects.dispatch(apiAction());
+  const action = await effects.take([API_ACTION_SUCCESS, API_ACTION_ERROR]);
+}
+
+export function initEffects(effects) {
+  effects.takeEvery(CONFIG_SUCCESS_ACTION, onConfigSuccess);
+}
+```
+
+### takeLatest
+
+### delay
+
+### debounce
+
+### throttle
+
+## effect combinators
+### all
+
+### race
 
 
