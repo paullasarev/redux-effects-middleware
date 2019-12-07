@@ -29,6 +29,11 @@ describe('middleware', ()=>{
     type: TEST_ACTION2,
   };
 
+  const TEST_ACTION3 = 'TEST_ACTION3';
+  const testAction3 = {
+    type: TEST_ACTION3,
+  };
+
   const next = jest.fn((action) => {
   });
 
@@ -188,5 +193,74 @@ describe('middleware', ()=>{
     });
 
   });
+  describe('delay', () => {
+    it('should delay for timeout', async (done) => {
+ 
+      const onTestAction = jest.fn(async (effects, action) => {
+        const timeout = 50;
+        const hrstart = process.hrtime();
+        await effects.delay(100);
+        const [sec, ms] = process.hrtime(hrstart);
+        expect(ms>timeout).toBeTruthy();
+        done();
+      });
+
+      function initEffects(effects) {
+        effects.takeEvery(TEST_ACTION, onTestAction);      
+      }
+      
+      const middleware = makeMiddleware(initEffects);
+      await middleware(testAction);
+    });
+
+    it('should return payload', async (done) => {
+  
+      const onTestAction = jest.fn(async (effects, action) => {
+        const timeout = 50;
+        const payload = {timeout};
+        const result = await effects.delay(100, payload);
+        expect(result).toBe(payload);
+        done();
+      });
+
+      function initEffects(effects) {
+        effects.takeEvery(TEST_ACTION, onTestAction);      
+      }
+      
+      const middleware = makeMiddleware(initEffects);
+      await middleware(testAction);
+    });
+
+  });
+
+  describe('all', () => {
+    it('should wait both 2 action', async (done) => {
+  
+      const onTestAction = jest.fn(async (effects, action) => {
+        setTimeout(()=>{
+          effects.dispatch(testAction2);
+        }, 10);
+        setTimeout(()=>{
+          effects.dispatch(testAction3);
+        }, 20);
+        const hrstart = process.hrtime();
+        const actions = await effects.all([TEST_ACTION2, TEST_ACTION3]);
+        const [sec, ms] = process.hrtime(hrstart);
+
+        expect(ms>20).toBeTruthy();
+        expect(actions).toEqual([testAction2, testAction3]);
+        done();
+      });
+
+      function initEffects(effects) {
+        effects.takeEvery(TEST_ACTION, onTestAction);      
+      }
+      
+      const middleware = makeMiddleware(initEffects);
+      await middleware(testAction);
+    });
+
+  });
+
 
 });

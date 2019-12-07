@@ -1,4 +1,4 @@
-import { isFunction, isUndefined, isArray } from 'lodash';
+import { isFunction, isUndefined, isArray, map } from 'lodash';
 
 function any(promises) {
   return new Promise( resolve => promises.forEach(
@@ -14,15 +14,7 @@ export class Effects {
     this.onceActions = {};
   }
 
-  select(selector = undefined) {
-    if (!isUndefined(selector)) {
-      return selector(this.getState());
-    }
-
-    return this.getState();
-  }
-
-  onAction(action) {
+  _onAction(action) {
     const everyHandler = this.everyActions[action.type];
     if (isFunction(everyHandler)) {
       return everyHandler(this, action);
@@ -37,7 +29,7 @@ export class Effects {
     }
   }
 
-  onTake = (actionType) => (resolve, reject) => {
+  _onTake = (actionType) => (resolve, reject) => {
     if (isArray(actionType)) {
       actionType.forEach(type => {
         this.onceActions[type] = {actionType, resolve};
@@ -47,12 +39,34 @@ export class Effects {
     }
   }
 
+  select(selector = undefined) {
+    if (!isUndefined(selector)) {
+      return selector(this.getState());
+    }
+
+    return this.getState();
+  }
+
   takeEvery(actionType, handler) {
     this.everyActions[actionType] = handler;
   }
 
   async take(actionType) {
-    return new Promise(this.onTake(actionType));
+    return new Promise(this._onTake(actionType));
+  }
+
+  async delay(timeout, payload) {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(payload);
+      }, timeout);
+    });
+  }
+
+  async all(actionTypes) {
+    return Promise.all(map(actionTypes, actionType => {
+      return new Promise(this._onTake(actionType));
+    }));
   }
 }
 
@@ -62,7 +76,7 @@ export function createMiddleware(initEffects) {
     initEffects(effects);
   
     return (next) => (action) => {
-      const result = effects.onAction(action);
+      const result = effects._onAction(action);
       if (result) {
         return result;
       }
