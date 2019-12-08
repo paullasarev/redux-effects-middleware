@@ -1,45 +1,55 @@
 import { isFunction, isUndefined, isArray, map } from 'lodash';
+import uuid4 from 'uuid/v4';
 
-function any(promises) {
-  return new Promise( resolve => promises.forEach(
-        promise => promise.then(resolve)));
+function isPromise (value) {
+  return !!value && 'function' === typeof value.then;
 }
 
 export class Effects {
 
-  constructor(dispatch, getState) {
-    this.dispatch = dispatch;
+  constructor(dispatch, getState, options) {
+    this._dispatch = dispatch;
     this.getState = getState;
-    this.everyActions = {};
-    this.onceActions = {};
+    this._everyActions = {};
+    this._onceActions = {};
+    this._setTimeout = options.setTimeout || setTimeout;
   }
 
   _onAction(action) {
-    const everyHandler = this.everyActions[action.type];
+    const everyHandler = this._everyActions[action.type];
     if (isFunction(everyHandler)) {
       return everyHandler(this, action);
     }
-    const onceAction = this.onceActions[action.type];
+    const onceAction = this._onceActions[action.type];
     if (onceAction) {
       const {actionType, resolve} = onceAction;
       actionType.forEach(type => {
-        delete this.onceActions[type];
+        delete this._onceActions[type];
       })
       return resolve(action);
     }
+    return undefined;
   }
 
   _onTake = (actionType) => (resolve, reject) => {
     if (isArray(actionType)) {
       actionType.forEach(type => {
-        this.onceActions[type] = {actionType, resolve};
+        this._onceActions[type] = {actionType, resolve};
       });
     } else {
-      this.onceActions[actionType] = {actionType: [actionType], resolve};
+      this._onceActions[actionType] = {actionType: [actionType], resolve};
     }
   }
 
-  select(selector = undefined) {
+  dispatch = (...args) => {
+    const result = this._dispatch(...args);
+    if (isPromise(result)) {
+      return result;
+    }
+    return Promise.resolve(result);
+  }
+
+  select = (selector = undefined) => {
     if (!isUndefined(selector)) {
       return selector(this.getState());
     }
@@ -47,31 +57,27 @@ export class Effects {
     return this.getState();
   }
 
-  takeEvery(actionType, handler) {
-    this.everyActions[actionType] = handler;
+  takeEvery = (actionType, handler) => {
+    this._everyActions[actionType] = handler;
   }
 
-  async take(actionType) {
+  take = async (actionType) => {
     return new Promise(this._onTake(actionType));
   }
 
-  async delay(timeout, payload) {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(payload);
-      }, timeout);
-    });
-  }
-
-  async timeout(timeout, func) {
+  delay = async (timeout, payload, ...args) => {
     return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        const result = func();
+      this._setTimeout(() => {
         try {
-          if (result.then) {
-            result.then(resolve, reject)
+          if (isFunction(payload)) {
+            const result = payload(...args);
+            if (isPromise(result)) {
+              result.then(resolve, reject);
+            } else {
+              resolve(result);
+            }
           } else {
-            resolve(result);
+            resolve(payload);
           }
         } catch (err) {
           reject(err);
@@ -80,20 +86,44 @@ export class Effects {
     });
   }
 
-  async all(actionTypes) {
-    return Promise.all(map(actionTypes, actionType => {
-      return new Promise(this._onTake(actionType));
-    }));
+  all = async (actions) => {
+    return Promise.all(actions);
   }
 
-  async race(actions) {
+  race = async (actions) => {
     return Promise.race(actions);
+  }
+
+  throttle = async (timeout, pattern, handler, ...args) => {
+    while (true) {
+      const action = await this.take(pattern);
+      await handler(this, ...args, action);
+      await this.delay(timeout);
+    }
+  }
+
+  debounce = async (timeout, pattern, handler, ...args) => {
+    while (true) {
+      let action = await this.take(pattern);
+  
+      while (true) {
+        const delayId = uuid4();
+        const first = await this.race([this.delay(timeout, delayId), this.take(pattern)]);  
+  
+        if (first === delayId) {
+          await handler(this, ...args, action);
+          break;
+        } else {
+          action = first;
+        }
+      }
+    }
   }
 }
 
-export function createMiddleware(initEffects) {
+export function createMiddleware(initEffects, options={}) {
   return ({ dispatch, getState }) => {
-    const effects = new Effects(dispatch, getState);
+    const effects = new Effects(dispatch, getState, options);
     initEffects(effects);
   
     return (next) => (action) => {

@@ -127,12 +127,72 @@ export function initEffects(effects) {
   effects.takeEvery(CONFIG_SUCCESS_ACTION, onConfigSuccess);
 ```
 
-### debounce
+```js
+// pass function
+async function onConfigSuccess(effects, action) {
+  ...
+  const payload = await effects.delay(1000, ()=>({id}));
+  // payload === {id}
+  ...
+}
+```
+
+```js
+// pass function with args
+async function onConfigSuccess(effects, action) {
+  ...
+  const payload = await effects.delay(1000, (arg)=>arg, {id});
+  // payload === {id}
+  ...
+}
+```
 
 ### throttle
 
+Fire handler not oftener than once per **timeout** milliseconds
+
+The handler willbe called with next parameters:
+*  **effects** object
+* possible trottle rest args
+* the action.
+
+```js
+async function fetchAutocomplete(effects, action) {
+  const proposals = await effects.dispatch(Api.fetchAutocomplete, action.text);
+  effects.dispatch({type: 'FETCHED_AUTOCOMPLETE_PROPOSALS', proposals});
+}
+
+export function initEffects(effects) {
+  effects.throttle(1000, 'FETCH_AUTOCOMPLETE', fetchAutocomplete);
+}
+
+```
+
+### debounce
+
+Fire handler in **timeout** since last action, reset timeout on the action arrived.
+
+The handler willbe called with next parameters:
+*  **effects** object
+* possible debounce rest args
+* the action.
+
+```js
+async function fetchAutocomplete(effects, action) {
+  const proposals = await effects.dispatch(Api.fetchAutocomplete, action.text);
+  effects.dispatch({type: 'FETCHED_AUTOCOMPLETE_PROPOSALS', proposals});
+}
+
+export function initEffects(effects) {
+  effects.debounce(1000, 'FETCH_AUTOCOMPLETE', fetchAutocomplete);
+}
+
+```
+
 ## effect combinators
 ### all
+
+await for all effects to be resolved
 
 ```js
 async function onConfigSuccess(effects, action) {
@@ -149,4 +209,18 @@ export function initEffects(effects) {
 
 ### race
 
+await the first occured effect from list
+
+```js
+async function onConfigSuccess(effects, action) {
+  const e1 = effects.delay(10, payload);
+  const e2 = effects.delay(20, effects.dispatch, testAction3);
+  const result = await effects.race([e1, e2]);
+  // result === payload
+}
+
+export function initEffects(effects) {
+  effects.takeEvery(CONFIG_SUCCESS_ACTION, onConfigSuccess);
+}
+```
 

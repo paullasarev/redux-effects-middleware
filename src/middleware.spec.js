@@ -1,4 +1,4 @@
-import { isUndefined } from 'lodash';
+import { isUndefined, filter } from 'lodash';
 
 import {
   createMiddleware,
@@ -9,7 +9,7 @@ describe('middleware', ()=>{
   let theMiddleware;
   const dispatch = jest.fn((action) => {
     lastActions.push(action);
-    theMiddleware(action);
+    return theMiddleware(action);
   });
   let storeState = {};
   const getState = jest.fn(() => {
@@ -52,7 +52,9 @@ describe('middleware', ()=>{
   });
 
   function makeMiddleware(initEffects) {
-    theMiddleware = createMiddleware(initEffects)(store)(next);
+    theMiddleware = createMiddleware(initEffects, {
+      setTimeout,
+    })(store)(next);
     return theMiddleware;
   }
 
@@ -62,6 +64,10 @@ describe('middleware', ()=>{
     }
     const [sec, ns] = process.hrtime(val);
     return ns / 1000000;
+  }
+
+  function firedActions(type) {
+    return filter(lastActions, {type}).length;
   }
 
   it('should call next middleware', async () => {
@@ -209,7 +215,7 @@ describe('middleware', ()=>{
         const hrstart = mstime();
         await effects.delay(100);
         const ms = mstime(hrstart);
-        expect(ms>timeout).toBeTruthy();
+        expect(ms).toBeGreaterThanOrEqual(timeout);
         done();
       });
 
@@ -245,17 +251,13 @@ describe('middleware', ()=>{
     it('should wait both 2 action', async (done) => {
   
       const onTestAction = jest.fn(async (effects, action) => {
-        setTimeout(()=>{
-          effects.dispatch(testAction2);
-        }, 10);
-        setTimeout(()=>{
-          effects.dispatch(testAction3);
-        }, 20);
         const hrstart = mstime();
-        const actions = await effects.all([TEST_ACTION2, TEST_ACTION3]);
+        const e1 = effects.delay(10, testAction2);
+        const e2 = effects.delay(20, testAction3);
+        const actions = await effects.all([e1, e2]);
         const ms = mstime(hrstart);
 
-        expect(ms>20).toBeTruthy();
+        expect(ms).toBeGreaterThanOrEqual(18);
         expect(actions).toEqual([testAction2, testAction3]);
         done();
       });
@@ -275,17 +277,14 @@ describe('middleware', ()=>{
   
       const onTestAction = jest.fn(async (effects, action) => {
         const payload = {id: 10};
-        const e1 = effects.delay(10, payload);
-        const e2 = effects.timeout(20, () => {
-          effects.dispatch(testAction3);
-        });
         const hrstart = mstime();
+        const e1 = effects.delay(10, payload);
+        const e2 = effects.delay(20, effects.dispatch, testAction3);
         const result = await effects.race([e1, e2]);
         const ms = mstime(hrstart);
 
-        console.log({ms,result})
-        expect(ms>10).toBeTruthy();
-        expect(ms<20).toBeTruthy();
+        expect(ms).toBeGreaterThanOrEqual(9);
+        expect(ms).toBeLessThan(20);
         expect(result).toEqual(payload);
         done();
       });
@@ -296,6 +295,67 @@ describe('middleware', ()=>{
       
       const middleware = makeMiddleware(initEffects);
       await middleware(testAction);
+    });
+
+  });
+
+  describe('throttle', () => {
+    it('should fire action not often than timeout', async (done) => {
+      let theEffects;
+  
+      function initEffects(effects) {
+        theEffects = effects;
+        effects.throttle(10, TEST_ACTION2, (effects) => effects.dispatch(testAction3));
+      }
+      
+      makeMiddleware(initEffects);
+      
+      await theEffects.dispatch(testAction2);
+      await theEffects.delay(5);
+      expect(firedActions(TEST_ACTION3)).toBe(1);
+
+      await theEffects.dispatch(testAction2);
+      expect(firedActions(TEST_ACTION3)).toBe(1);
+
+      await theEffects.delay(10);
+      expect(firedActions(TEST_ACTION3)).toBe(2);
+      await theEffects.dispatch(testAction2);
+      expect(firedActions(TEST_ACTION3)).toBe(3);
+
+      done();
+    });
+
+  });
+
+  describe('debounce', () => {
+    it('should suspend for timeout without actions to fire', async (done) => {
+      let theEffects;
+  
+      function initEffects(effects) {
+        theEffects = effects;
+        effects.debounce(10, TEST_ACTION2, (effects) => effects.dispatch(testAction3));
+      }
+      
+      makeMiddleware(initEffects);
+
+      theEffects.dispatch(testAction2);
+      expect(firedActions(TEST_ACTION3)).toBe(0);
+
+      await theEffects.delay(5);
+      await theEffects.dispatch(testAction2);
+      expect(firedActions(TEST_ACTION3)).toBe(0);
+
+      await theEffects.delay(15);
+      expect(firedActions(TEST_ACTION3)).toBe(1);
+
+      await theEffects.dispatch(testAction2);
+      await theEffects.dispatch(testAction2);
+      expect(firedActions(TEST_ACTION3)).toBe(1);
+
+      await theEffects.delay(15);
+      expect(firedActions(TEST_ACTION3)).toBe(2);
+
+      done();
     });
 
   });
