@@ -113,9 +113,19 @@ export function initEffects(effects) {
 }
 ```
 
-### takeLatest
-
 ### delay
+
+```js
+async function onConfigSuccess(effects, action) {
+  ...
+  const payload = await effects.delay(1000, {id});
+  // payload === {id}
+  ...
+}
+
+export function initEffects(effects) {
+  effects.takeEvery(CONFIG_SUCCESS_ACTION, onConfigSuccess);
+```
 
 ### debounce
 
@@ -123,6 +133,19 @@ export function initEffects(effects) {
 
 ## effect combinators
 ### all
+
+```js
+async function onConfigSuccess(effects, action) {
+  effects.dispatch(apiAction());
+  effects.dispatch(apiAction2());
+  const actions = await effects.all([API_ACTION_SUCCESS, API_ACTION2_SUCCESS]);
+}
+
+export function initEffects(effects) {
+  effects.takeEvery(CONFIG_SUCCESS_ACTION, onConfigSuccess);
+}
+```
+
 
 ### race
 

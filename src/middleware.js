@@ -63,10 +63,31 @@ export class Effects {
     });
   }
 
+  async timeout(timeout, func) {
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        const result = func();
+        try {
+          if (result.then) {
+            result.then(resolve, reject)
+          } else {
+            resolve(result);
+          }
+        } catch (err) {
+          reject(err);
+        }
+      }, timeout);
+    });
+  }
+
   async all(actionTypes) {
     return Promise.all(map(actionTypes, actionType => {
       return new Promise(this._onTake(actionType));
     }));
+  }
+
+  async race(actions) {
+    return Promise.race(actions);
   }
 }
 

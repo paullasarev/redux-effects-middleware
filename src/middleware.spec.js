@@ -1,4 +1,4 @@
-import { omit } from 'lodash';
+import { isUndefined } from 'lodash';
 
 import {
   createMiddleware,
@@ -54,6 +54,14 @@ describe('middleware', ()=>{
   function makeMiddleware(initEffects) {
     theMiddleware = createMiddleware(initEffects)(store)(next);
     return theMiddleware;
+  }
+
+  function mstime(val) {
+    if (isUndefined(val)) {
+      return process.hrtime();
+    }
+    const [sec, ns] = process.hrtime(val);
+    return ns / 1000000;
   }
 
   it('should call next middleware', async () => {
@@ -198,9 +206,9 @@ describe('middleware', ()=>{
  
       const onTestAction = jest.fn(async (effects, action) => {
         const timeout = 50;
-        const hrstart = process.hrtime();
+        const hrstart = mstime();
         await effects.delay(100);
-        const [sec, ms] = process.hrtime(hrstart);
+        const ms = mstime(hrstart);
         expect(ms>timeout).toBeTruthy();
         done();
       });
@@ -243,12 +251,42 @@ describe('middleware', ()=>{
         setTimeout(()=>{
           effects.dispatch(testAction3);
         }, 20);
-        const hrstart = process.hrtime();
+        const hrstart = mstime();
         const actions = await effects.all([TEST_ACTION2, TEST_ACTION3]);
-        const [sec, ms] = process.hrtime(hrstart);
+        const ms = mstime(hrstart);
 
         expect(ms>20).toBeTruthy();
         expect(actions).toEqual([testAction2, testAction3]);
+        done();
+      });
+
+      function initEffects(effects) {
+        effects.takeEvery(TEST_ACTION, onTestAction);      
+      }
+      
+      const middleware = makeMiddleware(initEffects);
+      await middleware(testAction);
+    });
+
+  });
+
+  describe('race', () => {
+    it('should wait first of 2 action', async (done) => {
+  
+      const onTestAction = jest.fn(async (effects, action) => {
+        const payload = {id: 10};
+        const e1 = effects.delay(10, payload);
+        const e2 = effects.timeout(20, () => {
+          effects.dispatch(testAction3);
+        });
+        const hrstart = mstime();
+        const result = await effects.race([e1, e2]);
+        const ms = mstime(hrstart);
+
+        console.log({ms,result})
+        expect(ms>10).toBeTruthy();
+        expect(ms<20).toBeTruthy();
+        expect(result).toEqual(payload);
         done();
       });
 
